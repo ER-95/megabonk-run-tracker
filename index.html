@@ -97,14 +97,12 @@ const CHARACTERS = ["Amog","Athena","Bandit","Birdo","Bush","Calcium","CL4NK","D
 const MAPS = ["Forest","Desert"];
 const DIFFICULTIES = ["Tier 1","Tier 2","Tier 3"];
 
-let runs = [];
-
 function getRuns() {
-    return runs;
+    return JSON.parse(localStorage.getItem('runs')||'[]');
 }
 
 function saveRuns(newRuns) {
-    runs = newRuns;
+    localStorage.setItem('runs', JSON.stringify(newRuns));
 }
 
 function parseTime(str) {
