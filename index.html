@@ -5,21 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Megabonk Run Tracker</title>
 <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; }
     .tab { display: none; padding: 10px; }
-    .tabs { display: flex; border-bottom: 1px solid #ccc; }
+    .tabs { display: flex; border-bottom: 1px solid #ccc; flex-shrink: 0; }
     .tabs button { padding: 10px 20px; border: none; border-bottom: 2px solid transparent; background: none; cursor: pointer; }
     .tabs button.active { border-bottom-color: #007BFF; font-weight: bold; }
     label { display: block; margin-top: 10px; }
     input, select { width: 200px; padding: 4px; margin-top: 4px; }
     input[type=checkbox] { width: auto; }
     button { margin-top: 10px; padding: 6px 12px; }
-    #progressTable { border-collapse: collapse; width: 100%; overflow: auto; display: block; max-height: 400px; }
+    #progressTable { border-collapse: collapse; width: 100%; }
     #progressTable th, #progressTable td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; min-width: 120px; }
     .completed { background-color: #dff3dd; }
     pre { margin: 0; font-family: monospace; }
     table#allRuns { width: 100%; border-collapse: collapse; }
     table#allRuns th, table#allRuns td { border: 1px solid #ccc; padding: 4px; text-align: center; }
+
+    /* Progress Tracker full height */
+    #progressTab { flex: 1; min-height: 0; padding: 0; flex-direction: column; }
+    #progressControls { padding: 10px; flex-shrink: 0; }
+    #progressWrapper { flex: 1; overflow: auto; min-height: 0; padding: 10px; }
 </style>
 </head>
 <body>
@@ -51,13 +56,14 @@
     </label>
     <button onclick="submitRun()">Submit Run</button>
     <button onclick="clearTimeKills()">Clear Time/Kills</button>
-
     <div id="configStats" style="margin-top:12px; background:#f0f0f0; padding:6px;"></div>
 </div>
 
 <div id="progressTab" class="tab">
-    <button onclick="refreshProgress()">Refresh</button>
-    <div style="overflow:auto; max-height:500px;">
+    <div id="progressControls">
+        <button onclick="refreshProgress()">Refresh</button>
+    </div>
+    <div id="progressWrapper">
         <table id="progressTable"></table>
     </div>
 </div>
@@ -65,6 +71,9 @@
 <div id="allRunsTab" class="tab">
     <button onclick="refreshAllRuns()">Refresh Runs</button>
     <button onclick="removeSelectedRun()">Remove Selected Run</button>
+    <button onclick="exportRuns()">Export Data</button>
+    <button onclick="document.getElementById('importFile').click()">Import Data</button>
+    <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importRuns(event)">
     <table id="allRuns">
         <thead>
             <tr>
@@ -88,12 +97,14 @@ const CHARACTERS = ["Amog","Athena","Bandit","Birdo","Bush","Calcium","CL4NK","D
 const MAPS = ["Forest","Desert"];
 const DIFFICULTIES = ["Tier 1","Tier 2","Tier 3"];
 
+let runs = [];
+
 function getRuns() {
-    return JSON.parse(localStorage.getItem('runs')||'[]');
+    return runs;
 }
 
-function saveRuns(runs) {
-    localStorage.setItem('runs', JSON.stringify(runs));
+function saveRuns(newRuns) {
+    runs = newRuns;
 }
 
 function parseTime(str) {
@@ -137,8 +148,8 @@ function submitRun() {
     const kills = killsStr ? parseInt(killsStr) : null;
     if (killsStr && isNaN(kills)) { alert("Kills must be an integer."); return; }
 
-    const runs = getRuns();
-    runs.push({
+    const currentRuns = getRuns();
+    currentRuns.push({
         id: Date.now(),
         character: char,
         map: map,
@@ -148,7 +159,7 @@ function submitRun() {
         kills: kills || "",
         timestamp: new Date().toISOString()
     });
-    saveRuns(runs);
+    saveRuns(currentRuns);
     refreshProgress();
     refreshAllRuns();
     updateConfigStats();
@@ -197,8 +208,8 @@ function computeProgress(runs) {
 function refreshProgress() {
     const table = document.getElementById("progressTable");
     table.innerHTML = "";
-    const runs = getRuns();
-    const prog = computeProgress(runs);
+    const currentRuns = getRuns();
+    const prog = computeProgress(currentRuns);
 
     const header = table.insertRow();
     ["Character", ...MAPS.flatMap(m => DIFFICULTIES.map(d => `${m} | ${d}`))].forEach(h => {
@@ -228,8 +239,8 @@ function updateConfigStats() {
     const char = characterSelect.value;
     const map = mapSelect.value;
     const diff = difficultySelect.value;
-    const runs = getRuns();
-    const prog = computeProgress(runs);
+    const currentRuns = getRuns();
+    const prog = computeProgress(currentRuns);
     const e = prog[`${char}|${map}|${diff}`];
     if (!e) return;
     const div = document.getElementById("configStats");
@@ -245,8 +256,8 @@ function updateConfigStats() {
 function refreshAllRuns() {
     const tbody = document.querySelector("#allRuns tbody");
     tbody.innerHTML = "";
-    const runs = getRuns();
-    runs.forEach(r => {
+    const currentRuns = getRuns();
+    currentRuns.forEach(r => {
         const tr = tbody.insertRow();
         const sel = tr.insertCell(); sel.innerHTML = `<input type="radio" name="selectedRun" value="${r.id}">`;
         [r.id,r.character,r.map,r.difficulty,r.success?'Yes':'No',r.time,r.kills||"",r.timestamp].forEach(v => { tr.insertCell().textContent=v; });
@@ -256,19 +267,63 @@ function refreshAllRuns() {
 function removeSelectedRun() {
     const sel = document.querySelector("#allRuns input[name='selectedRun']:checked");
     if (!sel) { alert("Select a run to remove."); return; }
-    const runs = getRuns().filter(r=>r.id!=sel.value);
-    saveRuns(runs);
+    const currentRuns = getRuns().filter(r=>r.id!=sel.value);
+    saveRuns(currentRuns);
     refreshAllRuns();
     refreshProgress();
     updateConfigStats();
     alert("Run removed!");
 }
 
+function exportRuns() {
+    const currentRuns = getRuns();
+    const dataStr = JSON.stringify(currentRuns, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `megabonk-runs-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function importRuns(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedRuns = JSON.parse(e.target.result);
+            if (!Array.isArray(importedRuns)) {
+                alert("Invalid file format. Expected an array of runs.");
+                return;
+            }
+            
+            const confirm = window.confirm(`Import ${importedRuns.length} runs? This will replace your current data.`);
+            if (confirm) {
+                saveRuns(importedRuns);
+                refreshAllRuns();
+                refreshProgress();
+                updateConfigStats();
+                alert("Runs imported successfully!");
+            }
+        } catch (error) {
+            alert("Error reading file: " + error.message);
+        }
+        event.target.value = ''; // Reset file input
+    };
+    reader.readAsText(file);
+}
+
 // Tab switching
 document.querySelectorAll(".tabButton").forEach(btn => btn.addEventListener("click",()=>{
     document.querySelectorAll(".tab").forEach(t=>t.style.display="none");
     document.querySelectorAll(".tabButton").forEach(b=>b.classList.remove("active"));
-    document.getElementById(btn.dataset.tab).style.display="block";
+    const targetTab = document.getElementById(btn.dataset.tab);
+    targetTab.style.display = targetTab.id === "progressTab" ? "flex" : "block";
     btn.classList.add("active");
 }));
 
